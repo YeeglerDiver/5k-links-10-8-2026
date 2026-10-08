@@ -28,16 +28,11 @@ jobs:
           const fs = require("fs");
           const path = require("path");
 
-          if (!fs.existsSync("index.svg")) {
-            console.error("Error: index.svg not found!");
-            process.exit(1);
-          }
-
           // Create base dist directory
           fs.mkdirSync("dist", { recursive: true });
           fs.writeFileSync(path.join("dist", ".nojekyll"), "");
 
-          // 1. Copy all assets to root of dist
+          // 1. Copy all static files & folders to dist root
           const assetFiles = ["achroma.js", "build-info.js", "cdn_links.txt", "sw.js", "index.svg"];
           const assetDirs = ["assets", "bg", "pages"];
 
@@ -48,24 +43,27 @@ jobs:
             if (fs.existsSync(dir)) fs.cpSync(dir, path.join("dist", dir), { recursive: true });
           }
 
-          // 2. HTML wrapper using absolute paths to root assets
-          // Update repoBase if your repository name changes
-          const repoBase = "/5k-links-10-8-2026";
+          // 2. Read the SVG template and inject the root base URL
+          let svgContent = fs.readFileSync("index.svg", "utf8");
+
+          // HTML wrapper with <base> tag so all iframes, scripts, and internal router tabs resolve to root
+          const repoBase = "/5k-links-10-8-2026/";
           const pageTemplate = `<!DOCTYPE html>
           <html lang="en">
           <head>
             <meta charset="UTF-8">
+            <base href="${repoBase}">
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
             <title>App</title>
             <style>
               html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; background: #000; }
               object { width: 100%; height: 100%; border: none; }
             </style>
-            <script src="${repoBase}/build-info.js"></script>
-            <script src="${repoBase}/achroma.js"></script>
+            <script src="build-info.js"></script>
+            <script src="achroma.js"></script>
           </head>
           <body>
-            <object data="${repoBase}/index.svg" type="image/svg+xml"></object>
+            <object data="index.svg" type="image/svg+xml"></object>
           </body>
           </html>`;
 
@@ -101,7 +99,7 @@ jobs:
             const folderPath = path.join("dist", nestedPath);
             fs.mkdirSync(folderPath, { recursive: true });
 
-            // Write index.html to each folder
+            // Write index.html with base href into each subfolder
             fs.writeFileSync(path.join(folderPath, "index.html"), pageTemplate);
 
             masterLinksHtml += `<a class="card" href="./${nestedPath}/">${nestedPath}</a>\n`;
