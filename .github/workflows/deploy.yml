@@ -22,7 +22,7 @@ jobs:
         with:
           node-version: 18
 
-      - name: Generate 5,000 Nested SVG Pages with Assets
+      - name: Generate 5,000 Nested SVG Pages with Asset Mapping
         run: |
           node -e '
           const fs = require("fs");
@@ -32,15 +32,26 @@ jobs:
             console.error("Error: index.svg not found!");
             process.exit(1);
           }
-          const svgContent = fs.readFileSync("index.svg", "utf8");
+          let svgContent = fs.readFileSync("index.svg", "utf8");
+
+          // Ensure the base tag is present pointing to your repo root
+          // This allows scripts, fonts, and images to load regardless of folder depth
+          const baseTag = `<base href="/5k-links-10-8-2026/" />`;
+          if (!svgContent.includes("<base ")) {
+            if (svgContent.includes("<svg")) {
+              svgContent = svgContent.replace(/<svg([^>]*)>/i, `<svg$1>\n${baseTag}`);
+            } else {
+              svgContent = baseTag + "\n" + svgContent;
+            }
+          }
 
           // Create base dist folder
           fs.mkdirSync("dist", { recursive: true });
 
-          // Disable Jekyll processing on GitHub Pages
+          // Disable Jekyll
           fs.writeFileSync(path.join("dist", ".nojekyll"), "");
 
-          // 1. Copy individual static asset files to dist root
+          // 1. Copy individual static assets to dist root
           const individualFiles = ["achroma.js", "build-info.js", "cdn_links.txt", "sw.js"];
           for (const file of individualFiles) {
             if (fs.existsSync(file)) {
@@ -48,7 +59,7 @@ jobs:
             }
           }
 
-          // 2. Recursively copy whole asset folders (assets, bg, pages) to dist
+          // 2. Copy whole asset folders to dist root
           const assetFolders = ["assets", "bg", "pages"];
           for (const folder of assetFolders) {
             if (fs.existsSync(folder)) {
@@ -88,17 +99,17 @@ jobs:
             const folderPath = path.join("dist", nestedPath);
             fs.mkdirSync(folderPath, { recursive: true });
 
-            // Place index.svg in each subfolder
+            // Write modified SVG with corrected base href
             fs.writeFileSync(path.join(folderPath, "index.svg"), svgContent);
 
-            // Forward root folder requests directly to index.svg
+            // Forward folder paths to index.svg
             const redirectHtml = `<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; url=./index.svg"><title>Loading...</title></head><body></body></html>`;
             fs.writeFileSync(path.join(folderPath, "index.html"), redirectHtml);
 
             masterLinksHtml += `<a class="card" href="./${nestedPath}/index.svg">${nestedPath}</a>\n`;
           }
 
-          // Dashboard Index
+          // Root index dashboard
           const masterIndexHtml = `<!DOCTYPE html>
           <html lang="en">
           <head>
