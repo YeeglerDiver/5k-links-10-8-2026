@@ -1,0 +1,221 @@
+name: Duplicate Template Deployer
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 18
+
+      - name: Generate 5,000 Nested SVG Pages with Assets
+        run: |
+          node -e '
+          const fs = require("fs");
+          const path = require("path");
+
+          if (!fs.existsSync("index.svg")) {
+            console.error("Error: index.svg not found!");
+            process.exit(1);
+          }
+          const svgContent = fs.readFileSync("index.svg", "utf8");
+
+          // Create base dist folder
+          fs.mkdirSync("dist", { recursive: true });
+
+          // Disable Jekyll processing on GitHub Pages
+          fs.writeFileSync(path.join("dist", ".nojekyll"), "");
+
+          // 1. Copy individual static asset files to dist root
+          const individualFiles = ["achroma.js", "build-info.js", "cdn_links.txt", "sw.js"];
+          for (const file of individualFiles) {
+            if (fs.existsSync(file)) {
+              fs.copyFileSync(file, path.join("dist", file));
+            }
+          }
+
+          // 2. Recursively copy whole asset folders (assets, bg, pages) to dist
+          const assetFolders = ["assets", "bg", "pages"];
+          for (const folder of assetFolders) {
+            if (fs.existsSync(folder)) {
+              fs.cpSync(folder, path.join("dist", folder), { recursive: true });
+            }
+          }
+
+          const TOTAL_PAGES = 5000;
+          const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+
+          function getRandomSegment(minLen = 4, maxLen = 10) {
+            const length = Math.floor(Math.random() * (maxLen - minLen + 1)) + minLen;
+            let segment = "";
+            for (let i = 0; i < length; i++) {
+              segment += chars.charAt(Math.floor(Math.random() * chars.length));
+            }
+            return segment;
+          }
+
+          function getNestedPath(minSegments = 2, maxSegments = 4) {
+            const depth = Math.floor(Math.random() * (maxSegments - minSegments + 1)) + minSegments;
+            const segments = [];
+            for (let i = 0; i < depth; i++) {
+              segments.push(getRandomSegment(4, 10));
+            }
+            return segments.join("/");
+          }
+
+          const uniquePaths = new Set();
+          while (uniquePaths.size < TOTAL_PAGES) {
+            uniquePaths.add(getNestedPath(2, 4));
+          }
+
+          let masterLinksHtml = "";
+
+          for (const nestedPath of uniquePaths) {
+            const folderPath = path.join("dist", nestedPath);
+            fs.mkdirSync(folderPath, { recursive: true });
+
+            // Place index.svg in each subfolder
+            fs.writeFileSync(path.join(folderPath, "index.svg"), svgContent);
+
+            // Forward root folder requests directly to index.svg
+            const redirectHtml = `<!DOCTYPE html><html><head><meta http-equiv="refresh" content="0; url=./index.svg"><title>Loading...</title></head><body></body></html>`;
+            fs.writeFileSync(path.join(folderPath, "index.html"), redirectHtml);
+
+            masterLinksHtml += `<a class="card" href="./${nestedPath}/index.svg">${nestedPath}</a>\n`;
+          }
+
+          // Dashboard Index
+          const masterIndexHtml = `<!DOCTYPE html>
+          <html lang="en">
+          <head>
+            <meta charset="UTF-8">
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+            <title>Directory Index</title>
+            <style>
+              * { box-sizing: border-box; margin: 0; padding: 0; }
+              body {
+                background: #0d1117;
+                color: #c9d1d9;
+                font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+                padding: 40px 20px;
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+              }
+              header {
+                text-align: center;
+                margin-bottom: 28px;
+                max-width: 650px;
+                width: 100%;
+              }
+              h1 {
+                font-size: 28px;
+                font-weight: 700;
+                color: #f0f6fc;
+                margin-bottom: 8px;
+              }
+              p {
+                color: #8b949e;
+                font-size: 14px;
+                margin-bottom: 20px;
+              }
+              .search-box {
+                width: 100%;
+                padding: 12px 18px;
+                border-radius: 8px;
+                border: 1px solid #30363d;
+                background: #161b22;
+                color: #f0f6fc;
+                font-size: 15px;
+                outline: none;
+                transition: border-color 0.2s ease, box-shadow 0.2s ease;
+              }
+              .search-box:focus {
+                border-color: #58a6ff;
+                box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.2);
+              }
+              .grid {
+                display: grid;
+                grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+                gap: 10px;
+                width: 100%;
+                max-width: 1300px;
+              }
+              .card {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: #161b22;
+                border: 1px solid #30363d;
+                border-radius: 6px;
+                padding: 12px;
+                color: #58a6ff;
+                text-decoration: none;
+                font-size: 12px;
+                font-family: monospace;
+                word-break: break-all;
+                text-align: center;
+                transition: background 0.15s ease, border-color 0.15s ease, transform 0.15s ease;
+              }
+              .card:hover {
+                background: #21262d;
+                border-color: #58a6ff;
+                color: #79c0ff;
+                transform: translateY(-2px);
+              }
+              .hidden {
+                display: none !important;
+              }
+            </style>
+          </head>
+          <body>
+            <header>
+              <h1>Directory Index</h1>
+              <p>5,000 Nested SVG Instances</p>
+              <input type="text" id="filter" class="search-box" placeholder="Quick find path..." autocomplete="off" />
+            </header>
+
+            <main class="grid" id="link-grid">
+              ${masterLinksHtml}
+            </main>
+
+            <script>
+              const filter = document.getElementById("filter");
+              const links = document.querySelectorAll(".card");
+
+              filter.addEventListener("input", (e) => {
+                const term = e.target.value.toLowerCase().trim();
+                links.forEach(card => {
+                  if (card.textContent.toLowerCase().includes(term)) {
+                    card.classList.remove("hidden");
+                  } else {
+                    card.classList.add("hidden");
+                  }
+                });
+              });
+            </script>
+          </body>
+          </html>`;
+
+          fs.writeFileSync(path.join("dist", "index.html"), masterIndexHtml);
+          '
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./dist
